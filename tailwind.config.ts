@@ -1,3 +1,4 @@
+// tailwind.config.ts
 import type { Config } from "tailwindcss";
 
 const config: Config = {
@@ -8,12 +9,17 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        main: ["var(--font-rajdhani)", "Rajdhani", "sans-serif"],
+      },
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        red:    "#e8001e",
+        gold:   "#c9a84c",
+        surface:"#111111",
       },
     },
   },
   plugins: [],
 };
+
 export default config;
