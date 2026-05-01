@@ -74,7 +74,7 @@ export default function AuthPage() {
   // ── Estilos inline para manter o arquivo autocontido ──────────────────────
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "13px 16px",
-    background: "#0a0a0a", border: "1px solid #1e1e1e",
+    background: "linear-gradient(160deg, #0d1f33 0%, #1f3856 100%)",
     borderRadius: 8, color: "#f0ece4",
     fontSize: 15, fontFamily: "var(--font-main)",
     outline: "none", letterSpacing: 0.5,
@@ -83,7 +83,7 @@ export default function AuthPage() {
 
   const btnPrimarioStyle: React.CSSProperties = {
     width: "100%", padding: "14px",
-    background: "#e8001e", border: "none",
+    background: "#5d2532", border: "none",
     borderBottom: "4px solid #a50015",
     borderRadius: 8, color: "#fff",
     fontSize: 15, fontWeight: 700, letterSpacing: 3,
