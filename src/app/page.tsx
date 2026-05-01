@@ -1,7 +1,6 @@
 "use client";
 // src/app/page.tsx
-// Porteiro da aplicação: redireciona o usuário para a página certa.
-// Se estiver logado → trilha. Se não estiver → auth.
+// Porteiro: redireciona para /auth ou /home dependendo do login.
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -13,27 +12,22 @@ export default function Home() {
 
   useEffect(() => {
     if (carregando) return;
-    router.replace(usuario ? "/trilha" : "/auth");
+    router.replace(usuario ? "/home" : "/auth");
   }, [usuario, carregando, router]);
 
-  // Tela de loading enquanto o Firebase verifica a sessão
   return (
     <div style={{
-      minHeight: "100vh", background: "#0a0a0a",
+      minHeight: "100vh",
+      background: "linear-gradient(160deg, #0d1f33 0%, #1f3856 100%)",
       display: "flex", alignItems: "center", justifyContent: "center",
       flexDirection: "column", gap: 16,
     }}>
       <div style={{
         width: 48, height: 48, borderRadius: "50%",
-        border: "3px solid #1e1e1e", borderTopColor: "#e8001e",
+        border: "3px solid #1f3856",
+        borderTopColor: "#5d2532",
         animation: "spin 0.8s linear infinite",
       }} />
-      <p style={{
-        color: "#333", fontSize: 11, letterSpacing: 4,
-        fontFamily: "var(--font-main)", fontWeight: 700,
-      }}>
-        CARREGANDO...
-      </p>
     </div>
   );
 }
