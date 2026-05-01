@@ -1,79 +1,91 @@
 "use client";
-// src/app/questao/page.tsx
-// Página de sessão de questões — o coração do aprendizado.
-//
-// Fluxo completo:
-//   1. Recebe noId e materia via searchParams (vindo da trilha)
-//   2. Busca as questões do banco local (src/data/questoes.ts)
-//   3. Usuário responde uma por uma com feedback imediato
-//   4. Ao finalizar, salva o progresso no Firestore e mostra o resultado
-//   5. Botão "Voltar à trilha" retorna para /trilha e atualiza o progresso
 
 import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { salvarProgressoNo } from "@/lib/progresso";
-import { buscarQuestoesPorNo } from "@/data/questoes";
+import { buscarQuestoesPorMateria } from "@/lib/questoes"; // ← Firestore
 import type { Questao } from "@/types";
 
-// ── Tela de loading genérica ───────────────────────────────────────────────
-
-function Loading() {
+function Loading({ mensagem = "PREPARANDO QUESTÕES..." }: { mensagem?: string }) {
   return (
     <div style={{
-      minHeight: "100vh", background: "#0a0a0a",
+      minHeight: "100vh", background: "#f8fafc",
       display: "flex", alignItems: "center", justifyContent: "center",
       flexDirection: "column", gap: 16,
     }}>
       <div style={{
         width: 44, height: 44, borderRadius: "50%",
-        border: "3px solid #1e1e1e", borderTopColor: "#e8001e",
+        border: "4px solid #e2e8f0", borderTopColor: "#5d2532",
         animation: "spin 0.8s linear infinite",
       }} />
       <p style={{
-        color: "#333", fontSize: 11, letterSpacing: 4,
-        fontFamily: "var(--font-main)", fontWeight: 700,
-      }}>PREPARANDO QUESTÕES...</p>
+        color: "#94a3b8", fontSize: 11, letterSpacing: 4,
+        fontFamily: "'Montserrat', sans-serif", fontWeight: 700,
+      }}>{mensagem}</p>
     </div>
   );
 }
 
-// ── Tela de resultado final ────────────────────────────────────────────────
-
-interface PropsResultado {
-  acertos: number;
-  total: number;
-  estrelas: number;
-  onVoltar: () => void;
-  salvando: boolean;
+function SemQuestoes({ materia, onVoltar }: { materia: string; onVoltar: () => void }) {
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#f8fafc",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexDirection: "column", gap: 16, padding: "0 24px", textAlign: "center",
+      fontFamily: "'Montserrat', sans-serif",
+    }}>
+      <div style={{ fontSize: 48 }}>⚠️</div>
+      <p style={{ color: "#1f3856", fontSize: 18, fontWeight: 800 }}>
+        Sem questões disponíveis
+      </p>
+      <p style={{ color: "#64748b", fontSize: 14, lineHeight: 1.7 }}>
+        Não encontramos questões para <strong style={{ color: "#5d2532" }}>{materia}</strong>.
+        <br />Importe questões via <strong>/migrar</strong> antes de continuar.
+      </p>
+      <button onClick={onVoltar} style={{
+        padding: "12px 24px", background: "#5d2532",
+        border: "none", borderBottom: "3px solid #3d1520",
+        borderRadius: 8, cursor: "pointer",
+        fontSize: 13, fontWeight: 800, color: "#fff",
+        letterSpacing: 2, fontFamily: "'Montserrat', sans-serif",
+      }}>
+        VOLTAR À TRILHA
+      </button>
+    </div>
+  );
 }
 
-function TelaResultado({ acertos, total, estrelas, onVoltar, salvando }: PropsResultado) {
+function TelaResultado({ acertos, total, estrelas, onVoltar, salvando }: {
+  acertos: number; total: number; estrelas: number;
+  onVoltar: () => void; salvando: boolean;
+}) {
   const pct = Math.round((acertos / total) * 100);
+  const atingiuMinimo = acertos / total >= 0.8;
 
-  // Escolhe a mensagem motivacional baseada no desempenho
   const mensagem =
-    pct === 100 ? "PERFEITO! O dojô te honra, guerreiro." :
-    pct >= 80   ? "EXCELENTE! Sua disciplina é admirável." :
-    pct >= 60   ? "BOM TREINO! Continue forjando sua mente." :
-    pct >= 40   ? "PERSISTÊNCIA! A derrota de hoje é o aprendizado de amanhã." :
-                  "RECOMEÇAR é a marca dos grandes. Tente novamente.";
+    pct === 100  ? "PERFEITO! Nó concluído com 3 estrelas! 🏆" :
+    pct >= 80    ? "APROVADO! Você concluiu este nó! ✅ Próximo desbloqueado." :
+    pct >= 60    ? "QUASE LÁ! Você precisa de 80% para concluir. Tente novamente! 💪" :
+    pct >= 40    ? "CONTINUE TREINANDO! Refaça este nó para avançar. 📚" :
+                   "NÃO DESISTA! A persistência leva à aprovação. Tente de novo! ⚔️";
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#0a0a0a",
+      minHeight: "100vh", background: "#f8fafc",
       display: "flex", alignItems: "center", justifyContent: "center",
       flexDirection: "column", padding: "24px 20px", textAlign: "center",
-      animation: "fadeIn 0.4s ease",
+      fontFamily: "'Montserrat', sans-serif",
     }}>
-      {/* Estrelas conquistadas */}
+      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+
+      {/* Estrelas */}
       <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
-        {[0, 1, 2].map((i) => (
+        {[0, 1, 2].map(i => (
           <span key={i} style={{
-            fontSize: 40,
-            color: estrelas > i ? "#c9a84c" : "#1e1e1e",
-            textShadow: estrelas > i ? "0 0 20px #c9a84c" : "none",
-            filter: estrelas > i ? "drop-shadow(0 0 8px #c9a84c)" : "none",
+            fontSize: 44,
+            color: estrelas > i ? "#f59e0b" : "#e2e8f0",
+            textShadow: estrelas > i ? "0 0 16px #f59e0b88" : "none",
             transition: `all 0.3s ease ${i * 0.15}s`,
           }}>★</span>
         ))}
@@ -81,94 +93,112 @@ function TelaResultado({ acertos, total, estrelas, onVoltar, salvando }: PropsRe
 
       {/* Porcentagem */}
       <div style={{
-        fontSize: 72, fontWeight: 700, color: "#e8001e",
-        fontFamily: "var(--font-main)", lineHeight: 1, marginBottom: 8,
-        textShadow: "0 0 40px rgba(232,0,30,0.4)",
+        fontSize: 80, fontWeight: 900,
+        color: atingiuMinimo ? "#5d2532" : "#1f3856",
+        lineHeight: 1, marginBottom: 8,
       }}>{pct}%</div>
 
-      <div style={{
-        fontSize: 14, color: "#5a5a5a", marginBottom: 4,
-        fontFamily: "var(--font-main)", letterSpacing: 1,
-      }}>
+      <div style={{ fontSize: 15, color: "#64748b", marginBottom: 4, fontWeight: 600 }}>
         {acertos} DE {total} QUESTÕES CORRETAS
       </div>
 
-      {/* Mensagem motivacional */}
+      {/* Badge aprovado/reprovado */}
       <div style={{
-        maxWidth: 320, padding: "16px 20px",
-        background: "#111", border: "1px solid #1e1e1e",
-        borderLeft: "3px solid #e8001e",
-        borderRadius: 10, marginTop: 24, marginBottom: 32,
-        fontSize: 14, color: "#888", lineHeight: 1.6,
-        fontFamily: "var(--font-main)", letterSpacing: 0.5,
+        display: "inline-block",
+        background: atingiuMinimo ? "rgba(93,37,50,0.1)" : "rgba(31,56,86,0.1)",
+        border: `2px solid ${atingiuMinimo ? "#5d2532" : "#1f3856"}44`,
+        borderRadius: 20, padding: "4px 20px",
+        fontSize: 12, fontWeight: 800,
+        color: atingiuMinimo ? "#5d2532" : "#1f3856",
+        letterSpacing: 2, marginBottom: 24,
+      }}>
+        {atingiuMinimo ? "✅ NÓ CONCLUÍDO" : "❌ TENTE NOVAMENTE"}
+      </div>
+
+      {/* Mensagem */}
+      <div style={{
+        maxWidth: 340, padding: "18px 22px",
+        background: "#ffffff", border: "1px solid #e2e8f0",
+        borderLeft: `4px solid ${atingiuMinimo ? "#5d2532" : "#1f3856"}`,
+        borderRadius: 12, marginBottom: 32,
+        fontSize: 14, fontWeight: 500, color: "#475569",
+        lineHeight: 1.7,
       }}>
         {mensagem}
       </div>
 
-      <button
-        onClick={onVoltar}
-        disabled={salvando}
-        style={{
-          padding: "15px 32px",
-          background: "#e8001e", border: "none",
-          borderBottom: "4px solid #a50015",
-          borderRadius: 8, cursor: salvando ? "wait" : "pointer",
-          fontSize: 14, fontWeight: 700, color: "#fff",
-          letterSpacing: 3, fontFamily: "var(--font-main)",
-          opacity: salvando ? 0.6 : 1,
-          boxShadow: "0 4px 24px rgba(232,0,30,0.4)",
-        }}
-      >
-        {salvando ? "SALVANDO..." : "⚔️ VOLTAR À TRILHA"}
+      <button onClick={onVoltar} disabled={salvando} style={{
+        padding: "16px 36px",
+        background: "#5d2532", border: "none",
+        borderBottom: "4px solid #3d1520",
+        borderRadius: 10, cursor: salvando ? "wait" : "pointer",
+        fontSize: 15, fontWeight: 800, color: "#fff",
+        letterSpacing: 2, opacity: salvando ? 0.6 : 1,
+        boxShadow: "0 6px 24px rgba(93,37,50,0.35)",
+        fontFamily: "'Montserrat', sans-serif",
+      }}>
+        {salvando ? "SALVANDO..." : "← VOLTAR À TRILHA"}
       </button>
     </div>
   );
 }
-
-// ── Componente principal (precisa de Suspense por causa do useSearchParams) ─
 
 function QuestaoConteudo() {
   const router = useRouter();
   const params = useSearchParams();
   const { usuario, carregando: carregandoAuth } = useAuth();
 
-  const noId     = params.get("noId") ?? "";
-  const materia  = params.get("materia") ?? "";
+  const noId    = params.get("noId") ?? "";
+  const materia = params.get("materia") ?? "";
 
-  const [questoes, setQuestoes]           = useState<Questao[]>([]);
-  const [indice, setIndice]               = useState(0);
-  const [respostas, setRespostas]         = useState<(number | null)[]>([]);
-  const [selecionada, setSelecionada]     = useState<number | null>(null);
-  const [confirmada, setConfirmada]       = useState(false);
-  const [finalizada, setFinalizada]       = useState(false);
-  const [salvando, setSalvando]           = useState(false);
-  const [carregando, setCarregando]       = useState(true);
+  const [questoes, setQuestoes]       = useState<Questao[]>([]);
+  const [indice, setIndice]           = useState(0);
+  const [respostas, setRespostas]     = useState<(number | null)[]>([]);
+  const [selecionada, setSelecionada] = useState<number | null>(null);
+  const [confirmada, setConfirmada]   = useState(false);
+  const [finalizada, setFinalizada]   = useState(false);
+  const [salvando, setSalvando]       = useState(false);
+  const [carregando, setCarregando]   = useState(true);
+  const [semQuestoes, setSemQuestoes] = useState(false);
 
-  // Redireciona se não estiver logado
   useEffect(() => {
     if (!carregandoAuth && !usuario) router.replace("/auth");
   }, [usuario, carregandoAuth, router]);
 
-  // Carrega as questões do banco local
+  // Busca questões no Firestore
   useEffect(() => {
-    if (!materia) return;
-    const qs = buscarQuestoesPorNo(materia, 5);
-    setQuestoes(qs);
-    setRespostas(new Array(qs.length).fill(null));
-    setCarregando(false);
-  }, [materia]);
+    if (!materia || !usuario) return;
+    async function carregar() {
+      setCarregando(true);
+      try {
+        const qs = await buscarQuestoesPorMateria(materia, 5);
+        if (qs.length === 0) {
+          setSemQuestoes(true);
+        } else {
+          setQuestoes(qs);
+          setRespostas(new Array(qs.length).fill(null));
+        }
+      } catch {
+        setSemQuestoes(true);
+      } finally {
+        setCarregando(false);
+      }
+    }
+    carregar();
+  }, [materia, usuario]);
 
   const questaoAtual = questoes[indice];
   const acertos = respostas.filter((r, i) => r === questoes[i]?.gabarito).length;
+  const pct = questoes.length > 0 ? acertos / questoes.length : 0;
   const estrelas = finalizada
-    ? (acertos / questoes.length >= 0.9 ? 3 : acertos / questoes.length >= 0.75 ? 2 : acertos / questoes.length >= 0.5 ? 1 : 0)
+    ? (pct === 1 ? 3 : pct >= 0.8 ? 2 : pct >= 0.6 ? 1 : 0)
     : 0;
 
   function confirmar() {
     if (selecionada === null) return;
-    const novasRespostas = [...respostas];
-    novasRespostas[indice] = selecionada;
-    setRespostas(novasRespostas);
+    const novas = [...respostas];
+    novas[indice] = selecionada;
+    setRespostas(novas);
     setConfirmada(true);
   }
 
@@ -194,95 +224,84 @@ function QuestaoConteudo() {
     }
   }, [usuario, noId, acertos, questoes.length, router]);
 
-  // ── Loading ──────────────────────────────────────────────────────────────
   if (carregandoAuth || carregando) return <Loading />;
-
-  // ── Tela final ───────────────────────────────────────────────────────────
-  if (finalizada) {
-    return (
-      <TelaResultado
-        acertos={acertos}
-        total={questoes.length}
-        estrelas={estrelas}
-        onVoltar={voltar}
-        salvando={salvando}
-      />
-    );
-  }
-
-  if (!questaoAtual) return <Loading />;
+  if (semQuestoes) return <SemQuestoes materia={materia} onVoltar={() => router.replace("/trilha")} />;
+  if (finalizada) return (
+    <TelaResultado
+      acertos={acertos} total={questoes.length}
+      estrelas={estrelas} onVoltar={voltar} salvando={salvando}
+    />
+  );
+  if (!questaoAtual) return <Loading mensagem="CARREGANDO..." />;
 
   const acertou = confirmada && selecionada === questaoAtual.gabarito;
+  const corPrimaria = "#5d2532";
 
-  // ── Tela de questão ───────────────────────────────────────────────────────
   return (
     <div style={{
-      minHeight: "100vh", background: "#0a0a0a",
-      maxWidth: 480, margin: "0 auto",
+      minHeight: "100vh", background: "#f8fafc",
+      maxWidth: 560, margin: "0 auto",
       display: "flex", flexDirection: "column",
+      fontFamily: "'Montserrat', sans-serif",
     }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&display=swap');
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
 
-      {/* Barra de progresso + fechar */}
+      {/* Barra de progresso */}
       <div style={{
         position: "sticky", top: 0, zIndex: 50,
-        background: "#0a0a0acc", backdropFilter: "blur(12px)",
-        borderBottom: "1px solid #1a1a1a",
-        padding: "12px 20px",
+        background: "#ffffffee", backdropFilter: "blur(12px)",
+        borderBottom: "1px solid #e2e8f0",
+        padding: "14px 20px",
         display: "flex", alignItems: "center", gap: 12,
       }}>
         <button onClick={() => router.replace("/trilha")} style={{
           background: "none", border: "none",
-          color: "#333", cursor: "pointer", fontSize: 18, padding: 0,
-          lineHeight: 1, flexShrink: 0,
+          color: "#94a3b8", cursor: "pointer",
+          fontSize: 20, padding: 0, lineHeight: 1, flexShrink: 0,
         }}>✕</button>
-
-        {/* Barra de progresso da sessão */}
         <div style={{
-          flex: 1, height: 8, background: "#1a1a1a",
+          flex: 1, height: 8, background: "#e2e8f0",
           borderRadius: 99, overflow: "hidden",
         }}>
           <div style={{
-            width: `${((indice) / questoes.length) * 100}%`,
-            height: "100%",
-            background: "linear-gradient(90deg, #e8001e, #e8001e88)",
+            width: `${(indice / questoes.length) * 100}%`, height: "100%",
+            background: `linear-gradient(90deg, ${corPrimaria}, ${corPrimaria}bb)`,
             borderRadius: 99, transition: "width 0.4s ease",
           }} />
         </div>
-
         <span style={{
-          fontSize: 12, color: "#333", fontWeight: 700,
-          fontFamily: "var(--font-main)", letterSpacing: 1, flexShrink: 0,
+          fontSize: 13, color: "#64748b", fontWeight: 700, flexShrink: 0,
         }}>
           {indice + 1}/{questoes.length}
         </span>
       </div>
 
-      <div style={{ flex: 1, padding: "20px 20px 32px", animation: "fadeIn 0.3s ease" }}>
+      <div style={{ flex: 1, padding: "24px 20px 40px", animation: "fadeIn 0.3s ease" }}>
 
-        {/* Tags da questão */}
+        {/* Tags */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
-          {[questaoAtual.banca, String(questaoAtual.ano)].map((tag) => (
+          {[questaoAtual.banca, String(questaoAtual.ano)].map(tag => (
             <span key={tag} style={{
-              padding: "4px 10px", borderRadius: 4,
-              background: "#111", border: "1px solid #1e1e1e",
-              fontSize: 11, color: "#444",
-              fontFamily: "var(--font-main)", letterSpacing: 2, fontWeight: 700,
+              padding: "4px 12px", borderRadius: 20,
+              background: "#1f385611", border: "1px solid #1f385622",
+              fontSize: 11, color: "#1f3856", fontWeight: 700, letterSpacing: 1,
             }}>{tag}</span>
           ))}
-          <span style={{
-            marginLeft: "auto", fontSize: 13,
-            color: "#c9a84c44",
-          }}>
-            {"★".repeat(questaoAtual.dificuldade)}
+          <span style={{ marginLeft: "auto", fontSize: 14, color: "#f59e0b" }}>
+            {"★".repeat(questaoAtual.dificuldade)}{"☆".repeat(5 - questaoAtual.dificuldade)}
           </span>
         </div>
 
         {/* Enunciado */}
         <div style={{
-          background: "#111", border: "1px solid #1e1e1e",
-          borderRadius: 12, padding: "18px 20px", marginBottom: 20,
-          fontSize: 15, lineHeight: 1.75, color: "#d0ccc4",
-          letterSpacing: 0.3,
+          background: "#ffffff", border: "1px solid #e2e8f0",
+          borderRadius: 14, padding: "20px 22px", marginBottom: 20,
+          fontSize: 16, lineHeight: 1.8, color: "#1e293b",
+          fontWeight: 500, boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
         }}>
           {questaoAtual.enunciado}
         </div>
@@ -290,42 +309,38 @@ function QuestaoConteudo() {
         {/* Alternativas */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
           {questaoAtual.alternativas.map((alt, i) => {
-            // Lógica de cor das alternativas após confirmação
-            let bg = "#111";
-            let borderColor = "#1e1e1e";
-            let textColor = "#888";
+            let bg = "#ffffff";
+            let borderColor = "#e2e8f0";
+            let textColor = "#334155";
 
             if (confirmada) {
               if (i === questaoAtual.gabarito) {
-                bg = "rgba(34,197,94,0.1)"; borderColor = "#22c55e"; textColor = "#22c55e";
+                bg = "rgba(34,197,94,0.08)"; borderColor = "#22c55e"; textColor = "#166534";
               } else if (i === selecionada && !acertou) {
-                bg = "rgba(232,0,30,0.1)"; borderColor = "#e8001e"; textColor = "#e8001e88";
+                bg = "rgba(239,68,68,0.08)"; borderColor = "#ef4444"; textColor = "#991b1b";
               }
             } else if (i === selecionada) {
-              bg = "rgba(232,0,30,0.08)"; borderColor = "#e8001e44"; textColor = "#f0ece4";
+              bg = `rgba(93,37,50,0.06)`; borderColor = corPrimaria; textColor = corPrimaria;
             }
 
             return (
-              <button key={i}
-                onClick={() => !confirmada && setSelecionada(i)}
-                style={{
-                  background: bg, border: `2px solid ${borderColor}`,
-                  borderRadius: 10, padding: "13px 16px",
-                  cursor: confirmada ? "default" : "pointer",
-                  textAlign: "left", color: textColor,
-                  fontSize: 14, lineHeight: 1.6, letterSpacing: 0.3,
-                  transition: "all 0.2s",
-                  display: "flex", alignItems: "flex-start", gap: 12,
-                  fontFamily: "var(--font-main)",
-                }}
-              >
-                {/* Marcador da alternativa */}
+              <button key={i} onClick={() => !confirmada && setSelecionada(i)} style={{
+                background: bg, border: `2px solid ${borderColor}`,
+                borderRadius: 12, padding: "14px 18px",
+                cursor: confirmada ? "default" : "pointer",
+                textAlign: "left", color: textColor,
+                fontSize: 14, fontWeight: 500, lineHeight: 1.6,
+                transition: "all 0.2s",
+                display: "flex", alignItems: "flex-start", gap: 14,
+                fontFamily: "'Montserrat', sans-serif",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.04)",
+              }}>
                 <span style={{
-                  minWidth: 26, height: 26, borderRadius: 6,
+                  minWidth: 28, height: 28, borderRadius: 8,
                   background: `${borderColor}22`,
+                  border: `1px solid ${borderColor}`,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 11, fontWeight: 700, color: borderColor,
-                  flexShrink: 0,
+                  fontSize: 12, fontWeight: 800, color: borderColor, flexShrink: 0,
                 }}>
                   {confirmada && i === questaoAtual.gabarito ? "✓"
                     : confirmada && i === selecionada && !acertou ? "✗"
@@ -337,62 +352,54 @@ function QuestaoConteudo() {
           })}
         </div>
 
-        {/* Explicação — aparece após confirmar */}
+        {/* Explicação */}
         {confirmada && (
           <div style={{
-            background: acertou ? "rgba(34,197,94,0.08)" : "rgba(232,0,30,0.08)",
-            border: `1px solid ${acertou ? "#22c55e44" : "#e8001e44"}`,
-            borderRadius: 10, padding: "16px 18px", marginBottom: 20,
+            background: acertou ? "rgba(34,197,94,0.06)" : "rgba(239,68,68,0.06)",
+            border: `1px solid ${acertou ? "#22c55e44" : "#ef444444"}`,
+            borderLeft: `4px solid ${acertou ? "#22c55e" : "#ef4444"}`,
+            borderRadius: 12, padding: "16px 18px", marginBottom: 20,
             animation: "fadeIn 0.3s ease",
           }}>
             <div style={{
-              fontSize: 12, fontWeight: 700, letterSpacing: 2, marginBottom: 8,
-              color: acertou ? "#22c55e" : "#e8001e",
-              fontFamily: "var(--font-main)",
+              fontSize: 12, fontWeight: 800, letterSpacing: 2, marginBottom: 8,
+              color: acertou ? "#166534" : "#991b1b",
             }}>
               {acertou ? "✓ CORRETO — +10 XP" : "✗ INCORRETO"}
             </div>
-            <div style={{
-              fontSize: 14, color: "#888", lineHeight: 1.7, letterSpacing: 0.3,
-            }}>
+            <div style={{ fontSize: 14, fontWeight: 500, color: "#475569", lineHeight: 1.7 }}>
               {questaoAtual.explicacao}
             </div>
           </div>
         )}
 
-        {/* Botão de ação */}
+        {/* Botão */}
         {!confirmada ? (
-          <button
-            onClick={confirmar}
-            disabled={selecionada === null}
-            style={{
-              width: "100%", padding: "15px",
-              background: selecionada !== null ? "#e8001e" : "#111",
-              border: `2px solid ${selecionada !== null ? "#e8001e" : "#1e1e1e"}`,
-              borderBottom: selecionada !== null ? "4px solid #a50015" : "2px solid #1e1e1e",
-              borderRadius: 8, cursor: selecionada !== null ? "pointer" : "not-allowed",
-              fontSize: 14, fontWeight: 700, color: selecionada !== null ? "#fff" : "#333",
-              letterSpacing: 3, fontFamily: "var(--font-main)",
-              boxShadow: selecionada !== null ? "0 4px 20px rgba(232,0,30,0.3)" : "none",
-              transition: "all 0.2s",
-            }}
-          >
+          <button onClick={confirmar} disabled={selecionada === null} style={{
+            width: "100%", padding: "16px",
+            background: selecionada !== null ? corPrimaria : "#f1f5f9",
+            border: `2px solid ${selecionada !== null ? corPrimaria : "#e2e8f0"}`,
+            borderBottom: selecionada !== null ? `4px solid #3d1520` : "2px solid #e2e8f0",
+            borderRadius: 10, cursor: selecionada !== null ? "pointer" : "not-allowed",
+            fontSize: 15, fontWeight: 800,
+            color: selecionada !== null ? "#fff" : "#94a3b8",
+            letterSpacing: 2, fontFamily: "'Montserrat', sans-serif",
+            boxShadow: selecionada !== null ? `0 4px 20px rgba(93,37,50,0.3)` : "none",
+            transition: "all 0.2s",
+          }}>
             CONFIRMAR
           </button>
         ) : (
-          <button
-            onClick={proxima}
-            style={{
-              width: "100%", padding: "15px",
-              background: "#e8001e", border: "none",
-              borderBottom: "4px solid #a50015",
-              borderRadius: 8, cursor: "pointer",
-              fontSize: 14, fontWeight: 700, color: "#fff",
-              letterSpacing: 3, fontFamily: "var(--font-main)",
-              boxShadow: "0 4px 20px rgba(232,0,30,0.35)",
-            }}
-          >
-            {indice + 1 >= questoes.length ? "VER RESULTADO" : "PRÓXIMA →"}
+          <button onClick={proxima} style={{
+            width: "100%", padding: "16px",
+            background: corPrimaria, border: "none",
+            borderBottom: "4px solid #3d1520",
+            borderRadius: 10, cursor: "pointer",
+            fontSize: 15, fontWeight: 800, color: "#fff",
+            letterSpacing: 2, fontFamily: "'Montserrat', sans-serif",
+            boxShadow: `0 4px 20px rgba(93,37,50,0.35)`,
+          }}>
+            {indice + 1 >= questoes.length ? "VER RESULTADO →" : "PRÓXIMA →"}
           </button>
         )}
       </div>
@@ -400,7 +407,6 @@ function QuestaoConteudo() {
   );
 }
 
-// Suspense é obrigatório quando useSearchParams é usado em Server/Client boundary do Next.js 14
 export default function QuestaoPage() {
   return (
     <Suspense fallback={<Loading />}>
